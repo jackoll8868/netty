@@ -37,26 +37,34 @@ import java.net.SocketAddress;
  * A channel provides a user:
  * <ul>
  * <li>the current state of the channel (e.g. is it open? is it connected?),</li>
+ * <li>channel当前的状态，例如：是否打开，是否已连接</li>
  * <li>the {@linkplain ChannelConfig configuration parameters} of the channel (e.g. receive buffer size),</li>
+ * <li>channel的相关配置项目，例如：接收缓存大小。{@linkplain ChannelConfig}</li>
  * <li>the I/O operations that the channel supports (e.g. read, write, connect, and bind), and</li>
+ * <li>channel支持的I/O操作(e.g. read, write, connect, and bind), and</li>
  * <li>the {@link ChannelPipeline} which handles all I/O events and requests
  *     associated with the channel.</li>
+ * <li>用于处理channel所有的I/O事件和请求的{@linkplain ChannelPipeline}</li>
  * </ul>
  *
  * <h3>All I/O operations are asynchronous.</h3>
+ * <h3>所有的 I/O 操作都是异步的.</h3>
  * <p>
  * All I/O operations in Netty are asynchronous.  It means any I/O calls will
  * return immediately with no guarantee that the requested I/O operation has
  * been completed at the end of the call.  Instead, you will be returned with
  * a {@link ChannelFuture} instance which will notify you when the requested I/O
  * operation has succeeded, failed, or canceled.
- *
+ * Netty中所有的I/O操作都是异步的。也就是说任何的I/O调用都会立即返回，但是不保证在调用结束之后对应的I/O操作已经处理完成。相应的
+ * 一个{@linkplain ChannelFuture}实例会返回用来告知你对应的I/O请求是否成功，失败或者被取消
  * <h3>Channels are hierarchical</h3>
+ * <h3>Channels 说分级别的</h3>
  * <p>
  * A {@link Channel} can have a {@linkplain #parent() parent} depending on
  * how it was created.  For instance, a {@link SocketChannel}, that was accepted
  * by {@link ServerSocketChannel}, will return the {@link ServerSocketChannel}
  * as its parent on {@link #parent()}.
+ * 一个{@link Channel}根据其实现不同，它可以有一个{@linkplain #parent()} 父类。例如，{@link SocketChannel}，如果被{@link ServerSocketChannel}接收，那么它的parent()方法会返回{@link ServerSocketChannel}
  * <p>
  * The semantics of the hierarchical structure depends on the transport
  * implementation where the {@link Channel} belongs to.  For example, you could
