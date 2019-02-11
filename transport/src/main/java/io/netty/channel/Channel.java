@@ -117,6 +117,7 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
 
     /**
      * Returns {@code true} if the {@link Channel} is registered with an {@link EventLoop}.
+     * 改channel是否被注册到{@link EventLoop}
      */
     boolean isRegistered();
 

@@ -41,8 +41,9 @@ import java.util.concurrent.RejectedExecutionException;
 public abstract class AbstractChannel extends DefaultAttributeMap implements Channel {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractChannel.class);
-
+    //关闭异常
     static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
+    //
     static final NotYetConnectedException NOT_YET_CONNECTED_EXCEPTION = new NotYetConnectedException();
 
     static {

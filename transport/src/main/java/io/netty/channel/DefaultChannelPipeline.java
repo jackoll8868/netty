@@ -41,14 +41,16 @@ import java.util.concurrent.RejectedExecutionException;
 /**
  * The default {@link ChannelPipeline} implementation.  It is usually created
  * by a {@link Channel} implementation when the {@link Channel} is created.
+ * {@link ChannelPipeline}的默认实现
  */
 public class DefaultChannelPipeline implements ChannelPipeline {
 
     static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultChannelPipeline.class);
-
+    //头节点
     private static final String HEAD_NAME = generateName0(HeadContext.class);
+    //尾节点
     private static final String TAIL_NAME = generateName0(TailContext.class);
-
+    //用于缓存{Class,name}的数据，所有Pipeline公用
     private static final FastThreadLocal<Map<Class<?>, String>> nameCaches =
             new FastThreadLocal<Map<Class<?>, String>>() {
         @Override
@@ -56,7 +58,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             return new WeakHashMap<Class<?>, String>();
         }
     };
-
+    //head-->this-->tail
     final AbstractChannelHandlerContext head;
     final AbstractChannelHandlerContext tail;
 
@@ -88,7 +90,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         this.channel = ObjectUtil.checkNotNull(channel, "channel");
         succeededFuture = new SucceededChannelFuture(channel, null);
         voidPromise =  new VoidChannelPromise(channel, true);
-
+        //初始化一个环形链表
         tail = new TailContext(this);
         head = new HeadContext(this);
 
@@ -103,14 +105,32 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return estimatorHandle;
     }
 
+    /**
+     * 用于引用计数
+     * @param msg 需要被计数的对象
+     * @param next 该对象所属的Context
+     * @return 如果实现林ReferenceCount接口，会先强制转换成ReferenceCount然后调用其touch方法，如果未实现这个接口则直接返回。
+     */
     final Object touch(Object msg, AbstractChannelHandlerContext next) {
         return touch ? ReferenceCountUtil.touch(msg, next) : msg;
     }
 
+    /**
+     * 创建一个默认的ChannelHandlerContext
+     * @param group Handler需要使用到的EventExecutorGroup
+     * @param name handler的名称
+     * @param handler 具体的handler
+     * @return
+     */
     private AbstractChannelHandlerContext newContext(EventExecutorGroup group, String name, ChannelHandler handler) {
         return new DefaultChannelHandlerContext(this, childExecutor(group), name, handler);
     }
 
+    /**
+     * 创建子执行器
+     * @param group
+     * @return
+     */
     private EventExecutor childExecutor(EventExecutorGroup group) {
         if (group == null) {
             return null;
@@ -140,15 +160,26 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return addFirst(null, name, handler);
     }
 
+    /**
+     *
+     * @param group    the {@link EventExecutorGroup} which will be used to execute the {@link ChannelHandler}
+     *                 methods
+     * @param name     the name of the handler to insert first
+     * @param handler  the handler to insert first
+     *
+     * @return
+     */
     @Override
     public final ChannelPipeline addFirst(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
+            //判断该Handler是否已经被重复使用
             checkMultiplicity(handler);
+            //获取handler的名字，如果不存在给一个默认的，如果已存在会抛出异常
             name = filterName(name, handler);
-
+            //创建一个新的ChannelHandlerContext
             newCtx = newContext(group, name, handler);
-
+            //将handler添加到头部
             addFirst0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventloop yet.
@@ -569,6 +600,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         oldCtx.next = newCtx;
     }
 
+    /**
+     * 判断这个Handler 是否说ChannelHandlerAdapter的实例，如果是则判断这个Handler是否添加了@Sharable注解或者该Handler是否已经被添加过了
+     * @param handler
+     */
     private static void checkMultiplicity(ChannelHandler handler) {
         if (handler instanceof ChannelHandlerAdapter) {
             ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler;
