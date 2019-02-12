@@ -185,6 +185,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             // If the registered is false it means that the channel was not registered on an eventloop yet.
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
+            //如果没有注册到EventLoop,让其可用
             if (!registered) {
                 callHandlerCallbackLater(newCtx, true);
                 return this;
@@ -616,6 +617,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /**
+     * 设置已经添加为真
+     * @param ctx
+     */
     private void callHandlerAdded0(final AbstractChannelHandlerContext ctx) {
         try {
             ctx.handler().handlerAdded(ctx);
@@ -1379,8 +1384,13 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /**
+     * 需要执行的HandlerCallback,该回调是只能调用一次的
+     */
     private abstract static class PendingHandlerCallback extends OneTimeTask {
+        //对应的Context
         final AbstractChannelHandlerContext ctx;
+        //链表的下一个节点
         PendingHandlerCallback next;
 
         PendingHandlerCallback(AbstractChannelHandlerContext ctx) {
@@ -1390,6 +1400,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         abstract void execute();
     }
 
+    /**
+     * HandlerCallback的具体实现,用于添加
+     */
     private final class PendingHandlerAddedTask extends PendingHandlerCallback {
 
         PendingHandlerAddedTask(AbstractChannelHandlerContext ctx) {
