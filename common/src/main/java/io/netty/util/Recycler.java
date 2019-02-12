@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Light-weight object pool based on a thread-local stack.
- *
+ * 基于Thread-Local机制的轻量级对象吃
  * @param <T> the type of the pooled object
  */
 public abstract class Recycler<T> {

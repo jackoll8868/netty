@@ -39,9 +39,16 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 /**
+ * {@link AbstractChannel}用来存储其未发送完的请求的内部数据结构。
  * (Transport implementors only) an internal data structure used by {@link AbstractChannel} to store its pending
  * outbound write requests.
  * <p>
+ * 所有的方法必须由传输层的具体实现来调用，除了如下的方法：
+ * <ul>
+ *     <li>{@link #size()} and {@link #isEmpty()}</li>
+ *     <li>{@link #isWritable()} </li>
+ *     <li>{@link #getUserDefinedWritability(int)} and {@link #setUserDefinedWritability(int, boolean)}</li>
+ * </ul>
  * All methods must be called by a transport implementation from an I/O thread, except the following ones:
  * <ul>
  * <li>{@link #size()} and {@link #isEmpty()}</li>
@@ -53,7 +60,7 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 public final class ChannelOutboundBuffer {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ChannelOutboundBuffer.class);
-
+    //默认1024字节的NIO buffer
     private static final FastThreadLocal<ByteBuffer[]> NIO_BUFFERS = new FastThreadLocal<ByteBuffer[]>() {
         @Override
         protected ByteBuffer[] initialValue() throws Exception {
@@ -78,12 +85,12 @@ public final class ChannelOutboundBuffer {
     private long nioBufferSize;
 
     private boolean inFail;
-
+    //所有缓存公用：所有等待的数据
     private static final AtomicLongFieldUpdater<ChannelOutboundBuffer> TOTAL_PENDING_SIZE_UPDATER;
 
     @SuppressWarnings("UnusedDeclaration")
     private volatile long totalPendingSize;
-
+    //所有缓存公用：所有不可写的数据
     private static final AtomicIntegerFieldUpdater<ChannelOutboundBuffer> UNWRITABLE_UPDATER;
 
     @SuppressWarnings("UnusedDeclaration")
@@ -115,6 +122,13 @@ public final class ChannelOutboundBuffer {
      * Add given message to this {@link ChannelOutboundBuffer}. The given {@link ChannelPromise} will be notified once
      * the message was written.
      */
+    /**
+     * 将数据添加到{@link ChannelOutboundBuffer}.
+     * 是将数据添加到链表末尾
+     * @param msg 仅支持{@link ByteBuf},{@link FileRegion},{@link ByteBufHolder}
+     * @param size
+     * @param promise
+     */
     public void addMessage(Object msg, int size, ChannelPromise promise) {
         Entry entry = Entry.newInstance(msg, size, total(msg), promise);
         if (tailEntry == null) {
@@ -137,6 +151,11 @@ public final class ChannelOutboundBuffer {
     /**
      * Add a flush to this {@link ChannelOutboundBuffer}. This means all previous added messages are marked as flushed
      * and so you will be able to handle them.
+     */
+    /**
+     * 将当前队列所有的数据设置未已刷新，方便后续对数据进行处理。
+     * 1。将尾节点的数据更新为空，同时将flustedEntry设置为尾节点的指。
+     * 2。采用FILO的方式将尾节点之前的数据设置为已经刷新，同时释放内存并且更新TOTAL_PENDING_SIZE_UPDATER的值
      */
     public void addFlush() {
         // There is no need to process all entries if there was already a flush before and no new messages
@@ -172,6 +191,11 @@ public final class ChannelOutboundBuffer {
         incrementPendingOutboundBytes(size, true);
     }
 
+    /**
+     * 更新未刷新数据大小，如果此次更新已经大于{@link Channel#config()}中设置的最高水位，则会将channel是否可写设置未false
+     * @param size 数据大小
+     * @param invokeLater 是否可用
+     */
     private void incrementPendingOutboundBytes(long size, boolean invokeLater) {
         if (size == 0) {
             return;
@@ -563,6 +587,10 @@ public final class ChannelOutboundBuffer {
         }
     }
 
+    /**
+     * 基于CAS方式实现
+     * @param invokeLater
+     */
     private void setUnwritable(boolean invokeLater) {
         for (;;) {
             final int oldValue = unwritable;
@@ -790,6 +818,9 @@ public final class ChannelOutboundBuffer {
         boolean processMessage(Object msg) throws Exception;
     }
 
+    /**
+     * 用于承载实际需要写出去的数据
+     */
     static final class Entry {
         private static final Recycler<Entry> RECYCLER = new Recycler<Entry>() {
             @Override
@@ -797,15 +828,21 @@ public final class ChannelOutboundBuffer {
                 return new Entry(handle);
             }
         };
-
+        //基于Thread-Local的轻量级对象池
         private final Handle<Entry> handle;
+        //下一个节点
         Entry next;
+        //实际存储的对象
         Object msg;
+        //
         ByteBuffer[] bufs;
         ByteBuffer buf;
+        //这个实体对应的ChannelPromise,用于后续的回调
         ChannelPromise promise;
         long progress;
+        //实际类所占用内存大小
         long total;
+        //等待写的大小
         int pendingSize;
         int count = -1;
         boolean cancelled;
@@ -814,6 +851,14 @@ public final class ChannelOutboundBuffer {
             this.handle = handle;
         }
 
+        /**
+         * 创建新的实体
+         * @param msg 实体对象
+         * @param size 对象大小
+         * @param total 总数
+         * @param promise
+         * @return
+         */
         static Entry newInstance(Object msg, int size, long total, ChannelPromise promise) {
             Entry entry = RECYCLER.get();
             entry.msg = msg;
@@ -823,6 +868,10 @@ public final class ChannelOutboundBuffer {
             return entry;
         }
 
+        /**
+         * 取消
+         * @return
+         */
         int cancel() {
             if (!cancelled) {
                 cancelled = true;
@@ -842,6 +891,9 @@ public final class ChannelOutboundBuffer {
             return 0;
         }
 
+        /**
+         * 垃圾回收
+         */
         void recycle() {
             next = null;
             bufs = null;
