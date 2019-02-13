@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Light-weight object pool based on a thread-local stack.
- * 基于Thread-Local机制的轻量级对象吃
+ * 基于Thread-Local机制的轻量级对象池
  * @param <T> the type of the pooled object
  */
 public abstract class Recycler<T> {
@@ -44,12 +44,15 @@ public abstract class Recycler<T> {
             // NOOP
         }
     };
+    //ID生成器
     private static final AtomicInteger ID_GENERATOR = new AtomicInteger(Integer.MIN_VALUE);
+    //自己的线程ID
     private static final int OWN_THREAD_ID = ID_GENERATOR.getAndIncrement();
     // TODO: Some arbitrary large number - should adjust as we get more production experience.
     private static final int DEFAULT_INITIAL_MAX_CAPACITY = 262144;
     private static final int DEFAULT_MAX_CAPACITY;
     private static final int INITIAL_CAPACITY;
+    //
     private static final int LINK_CAPACITY;
 
     static {
@@ -100,6 +103,7 @@ public abstract class Recycler<T> {
         if (maxCapacity == 0) {
             return newObject((Handle<T>) NOOP_HANDLE);
         }
+        //栈
         Stack<T> stack = threadLocal.get();
         DefaultHandle<T> handle = stack.pop();
         if (handle == null) {
@@ -136,16 +140,19 @@ public abstract class Recycler<T> {
     }
 
     protected abstract T newObject(Handle<T> handle);
-
+    //Handle接口
     public interface Handle<T> {
         void recycle(T object);
     }
-
+    //Handle默认实现
     static final class DefaultHandle<T> implements Handle<T> {
+        //最后一个回收ID
         private int lastRecycledId;
+        //回收ID
         private int recycleId;
-
+        //栈
         private Stack<?> stack;
+        //实际存储的值
         private Object value;
 
         DefaultHandle(Stack<?> stack) {
@@ -173,7 +180,9 @@ public abstract class Recycler<T> {
             queue.add(this);
         }
     }
-
+    /**
+     * 延迟回收的缓存数据其数据结构是Thread-Local<Map<Stack<?,WeakOrderQueue>>
+     * */
     private static final FastThreadLocal<Map<Stack<?>, WeakOrderQueue>> DELAYED_RECYCLED =
             new FastThreadLocal<Map<Stack<?>, WeakOrderQueue>>() {
         @Override
@@ -184,13 +193,17 @@ public abstract class Recycler<T> {
 
     // a queue that makes only moderate guarantees about visibility: items are seen in the correct order,
     // but we aren't absolutely guaranteed to ever see anything at all, thereby keeping the queue cheap to maintain
+    // 一个用来保证绝对可见性的队列:items 有明确的顺序;
+    // 但是我们不能绝对保证你看过什么,因此需要保证队列足够小方便管理
     private static final class WeakOrderQueue {
 
         // Let Link extend AtomicInteger for intrinsics. The Link itself will be used as writerIndex.
+        // 用来记录writerIndex
         @SuppressWarnings("serial")
         private static final class Link extends AtomicInteger {
+            //存储的内容
             private final DefaultHandle<?>[] elements = new DefaultHandle[LINK_CAPACITY];
-
+            //读指针
             private int readIndex;
             private Link next;
         }
@@ -298,13 +311,19 @@ public abstract class Recycler<T> {
         // than the stack owner recycles: when we run out of items in our stack we iterate this collection
         // to scavenge those that can be reused. this permits us to incur minimal thread synchronisation whilst
         // still recycling all items.
+        //父节点
         final Recycler<T> parent;
+        //所属的线程
         final Thread thread;
+        //储存的对象
         private DefaultHandle<?>[] elements;
+        //最大存储空间
         private final int maxCapacity;
+        //当前大小
         private int size;
-
+        //头节点
         private volatile WeakOrderQueue head;
+        //指针和之前的节点
         private WeakOrderQueue cursor, prev;
 
         Stack(Recycler<T> parent, Thread thread, int maxCapacity) {
@@ -313,10 +332,16 @@ public abstract class Recycler<T> {
             this.maxCapacity = maxCapacity;
             elements = new DefaultHandle[Math.min(INITIAL_CAPACITY, maxCapacity)];
         }
-
+        /**
+         * 增加栈大小
+         * @parm expectedCapacity 期望的栈大小
+         * @return 返回最终扩展完的栈大小,栈大小不会超过最大栈大小
+         */
         int increaseCapacity(int expectedCapacity) {
+            //当前栈大小
             int newCapacity = elements.length;
             int maxCapacity = this.maxCapacity;
+            //2倍扩展栈大小直到值大于等于期待的栈大小
             do {
                 newCapacity <<= 1;
             } while (newCapacity < expectedCapacity && newCapacity < maxCapacity);
@@ -328,7 +353,10 @@ public abstract class Recycler<T> {
 
             return newCapacity;
         }
-
+        /**
+         *出栈
+         @return FILO
+         */
         @SuppressWarnings({ "unchecked", "rawtypes" })
         DefaultHandle<T> pop() {
             int size = this.size;
@@ -349,7 +377,9 @@ public abstract class Recycler<T> {
             this.size = size;
             return ret;
         }
-
+        /**
+         * 清除数据
+         */
         boolean scavenge() {
             // continue an existing scavenge, if any
             if (scavengeSome()) {
